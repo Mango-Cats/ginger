@@ -23,8 +23,6 @@ class PositionalEncoding(nn.Module):
 
         # Create the positional encoding matrix
         pe: torch.Tensor = torch.zeros(max_sequence_length, embedding_dim)
-
-        # position = [0, 1, 2, 3, ..., max_sequence_length-1]
         position: torch.Tensor = torch.arange(
             0, max_sequence_length, dtype=torch.float
         ).unsqueeze(1)
@@ -37,17 +35,14 @@ class PositionalEncoding(nn.Module):
             * (-math.log(10000.0) / embedding_dim)
         )
 
-        # Apply sine to even indices (0, 2, 4, ...)
+        # Sine to even indices and cosine to odd indices
         pe[:, 0::2] = torch.sin(position * div_term)
-
-        # Apply cosine to odd indices (1, 3, 5, ...)
         pe[:, 1::2] = torch.cos(position * div_term)
 
         # Reshape from (max_len, d_model) to (max_len, 1, d_model)
         # This is needed because batches are: (seq_len, batch_size, d_model)
         pe = pe.unsqueeze(0).transpose(0, 1)
 
-        # Register as buffer (saved with model, not trained)
         self.register_buffer("pe", pe)
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
@@ -55,9 +50,5 @@ class PositionalEncoding(nn.Module):
         Add positional encodings to embeddings.
         """
         seq_len: int = embeddings.size(0)
-
-        # Add positional encoding to embeddings
         embeddings = embeddings + self.pe[:seq_len, :]
-
-        # Apply dropout for regularization
         return self.dropout(embeddings)

@@ -15,7 +15,7 @@ def validate_pair(word: str, ipa: str) -> bool:
     """
     if not word or not ipa:
         return False
-    if not word.isalpha():  
+    if not word.isalpha():
         return False
     return True
 

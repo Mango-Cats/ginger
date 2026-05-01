@@ -27,7 +27,7 @@ from .constants import (
 
 __all__ = [
     "Vocabulary",
-    "create_dataloader",
+    "create_dataloaders",
     "load_tsv_file",
     "clean_and_build_vocabularies",
     "G2PDataset",
@@ -42,14 +42,19 @@ __all__ = [
 ]
 
 
-def create_dataloader(
+import random
+
+
+def create_dataloaders(
     file_path: Path,
     batch_size: int = 32,
     shuffle: bool = True,
     num_workers: int = 0,
-) -> Tuple[DataLoader[Any], Vocabulary, Vocabulary]:
+    train_ratio: float = 0.8,
+    val_ratio: float = 0.1,
+) -> Tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any], Vocabulary, Vocabulary]:
     """
-    Complete pipeline: loads, cleans, builds vocabularies, creates dataset, and 
+    Complete pipeline: loads, cleans, builds vocabularies, creates dataset, and
     created a DataLoader.
     """
     pairs = load_tsv_file(file_path)
@@ -59,15 +64,55 @@ def create_dataloader(
     if not cleaned_pairs:
         raise ValueError("No valid pairs found after cleaning")
 
-    dataset = G2PDataset(cleaned_pairs, grapheme_vocab, phoneme_vocab)
+    # Create splits
+    random.seed(42)
+    shuffled_pairs = cleaned_pairs.copy()
+    random.shuffle(shuffled_pairs)
+
+    n = len(shuffled_pairs)
+    train_end = int(n * train_ratio)
+    val_end = int(n * (train_ratio + val_ratio))
+
+    train_pairs = shuffled_pairs[:train_end]
+    val_pairs = shuffled_pairs[train_end:val_end]
+    test_pairs = shuffled_pairs[val_end:]
+
+    train_dataset = G2PDataset(
+        data_pairs=train_pairs,
+        grapheme_vocab=grapheme_vocab,
+        phoneme_vocab=phoneme_vocab,
+    )
+    val_dataset = G2PDataset(
+        data_pairs=val_pairs, grapheme_vocab=grapheme_vocab, phoneme_vocab=phoneme_vocab
+    )
+    test_dataset = G2PDataset(
+        data_pairs=test_pairs,
+        grapheme_vocab=grapheme_vocab,
+        phoneme_vocab=phoneme_vocab,
+    )
 
     from .collate import collate_batch
-    dataloader = DataLoader(
-        dataset,
+
+    train_loader = DataLoader(
+        train_dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         collate_fn=collate_batch,
         num_workers=num_workers,
     )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_batch,
+        num_workers=num_workers,
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_batch,
+        num_workers=num_workers,
+    )
 
-    return dataloader, grapheme_vocab, phoneme_vocab
+    return train_loader, val_loader, test_loader, grapheme_vocab, phoneme_vocab
