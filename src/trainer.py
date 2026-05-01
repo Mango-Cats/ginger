@@ -28,6 +28,9 @@ def train(
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
 
+        src = src.transpose(0, 1)
+        tgt = tgt.transpose(0, 1)
+
         tgt_input = tgt[:, :-1]
         tgt_expected = tgt[:, 1:]
 
@@ -37,7 +40,7 @@ def train(
         seq_len = tgt_input.size(1)
         tgt_mask = global_mask[:seq_len, :seq_len].to(device)
 
-        with torch.autocast("cuda"):
+        with torch.autocast(str(device)):
             output = model(
                 src,
                 tgt_input,
@@ -74,13 +77,16 @@ def evaluate(model, dataloader, criterion, device):
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
 
+        src = src.transpose(0, 1)
+        tgt = tgt.transpose(0, 1)
+
         tgt_input = tgt[:, :-1]
         tgt_expected = tgt[:, 1:]
 
         seq_len = tgt_input.size(1)
         tgt_mask = global_mask[:seq_len, :seq_len].to(device)
 
-        with torch.autocast("cuda"):
+        with torch.autocast(str(device)):
             output = model(src, tgt_input, tgt_mask=tgt_mask)
             loss = criterion(
                 output.reshape(-1, output.size(-1)),
@@ -90,7 +96,6 @@ def evaluate(model, dataloader, criterion, device):
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
-
 
 def train_model(
     model,
