@@ -39,13 +39,12 @@ class PositionalEncoding(nn.Module):
 
         self.register_buffer("pe", pe)
 
-    def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Add positional encodings to embeddings.
         """
         seq_len = x.size(1)
-
         pe_sliced = self.pe[:, :seq_len, :].to(x.device)
-
         x = x + pe_sliced
+        
         return self.dropout(x)
