@@ -11,7 +11,7 @@ MAX_SEQ_LEN: int = 500
 GLOBAL_CAUSAL_MASK: torch.Tensor = create_causal_mask(MAX_SEQ_LEN, device="cpu")
 
 
-def train_epoch(
+def train(
     model,
     dataloader,
     criterion,
@@ -28,15 +28,12 @@ def train_epoch(
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
 
-        # Because batch_first=True, Sequence is dimension 1.
         tgt_input = tgt[:, :-1]
         tgt_expected = tgt[:, 1:]
 
-        # PyTorch padding masks expect (Batch, Seq) when batch_first=True
         src_padding_mask = (src == PAD_IDX).bool()
         tgt_padding_mask = (tgt_input == PAD_IDX).bool()
 
-        # Create causal mask (seq_len x seq_len)
         seq_len = tgt_input.size(1)
         tgt_mask = global_mask[:seq_len, :seq_len].to(device)
 
@@ -136,7 +133,6 @@ def train_model(
         train_losses.append(train_loss)
         val_losses.append(val_loss)
 
-        # GLOBAL BEST
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             no_improve = 0
