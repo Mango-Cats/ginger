@@ -83,11 +83,21 @@ def evaluate(model, dataloader, criterion, device):
         tgt_input = tgt[:, :-1]
         tgt_expected = tgt[:, 1:]
 
+        src_padding_mask = (src == PAD_IDX).bool()
+        tgt_padding_mask = (tgt_input == PAD_IDX).bool()
+
         seq_len = tgt_input.size(1)
         tgt_mask = global_mask[:seq_len, :seq_len].to(device)
 
         with torch.autocast(str(device)):
-            output = model(src, tgt_input, tgt_mask=tgt_mask)
+            output = model(
+                src, 
+                tgt_input, 
+                tgt_mask=tgt_mask,
+                src_padding_mask=src_padding_mask,
+                tgt_padding_mask=tgt_padding_mask
+            )
+            
             loss = criterion(
                 output.reshape(-1, output.size(-1)),
                 tgt_expected.reshape(-1),
@@ -112,7 +122,9 @@ def train_model(
     log_every=5,
 ):
     no_improve = 0
+
     best_val_loss = float("inf")
+    best_epoch = -1
 
     train_losses = []
     val_losses = []
@@ -123,6 +135,7 @@ def train_model(
     print(f"\nStarting training for {num_epochs} epochs...\n")
 
     for epoch in range(num_epochs):
+
         train_loss = train(
             model=model,
             dataloader=train_loader,
@@ -140,9 +153,11 @@ def train_model(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            best_epoch = epoch + 1
             no_improve = 0
+
             torch.save(model.state_dict(), best_model_path)
-            status = "(Best)"
+            status = "(NEW GLOBAL BEST)"
         else:
             no_improve += 1
             status = f"(No improvement for {no_improve} epochs)"
@@ -156,7 +171,8 @@ def train_model(
                 f"Epoch {epoch + 1:3d}/{num_epochs} | "
                 f"Train Loss: {train_loss:.4f} | "
                 f"Val Loss: {val_loss:.4f} {status} | "
-                f"Best (last {log_every}): {window_best_val:.4f} @ epoch {window_best_epoch}"
+                f"Best (last {log_every}): {window_best_val:.4f} @ epoch {window_best_epoch} | "
+                f"Global Best: {best_val_loss:.4f} @ epoch {best_epoch}"
             )
 
             window_best_val = float("inf")
@@ -164,10 +180,12 @@ def train_model(
 
         if no_improve >= patience:
             print(f"\nStopping early (patience={patience})")
-            print(f"Best validation loss: {best_val_loss:.4f}")
+            print(f"Best validation loss: {best_val_loss:.4f} @ epoch {best_epoch}")
             print("Restoring best model...")
 
-            model.load_state_dict(torch.load(best_model_path, map_location=device))
+            model.load_state_dict(
+                torch.load(best_model_path, map_location=device)
+            )
             break
 
     return {
@@ -175,4 +193,5 @@ def train_model(
         "train_losses": train_losses,
         "val_losses": val_losses,
         "best_val_loss": best_val_loss,
+        "best_epoch": best_epoch,
     }
