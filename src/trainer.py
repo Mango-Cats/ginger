@@ -11,98 +11,96 @@ from src.dataman.constants import PAD_IDX
 
 DeviceType = Union[torch.device, str]
 
-# PRE-COMPUTE MASK 
-MAX_SEQ_LEN: int = 500 
-GLOBAL_CAUSAL_MASK: torch.Tensor = create_causal_mask(MAX_SEQ_LEN, device='cpu')
+# PRE-COMPUTE MASK
+MAX_SEQ_LEN: int = 500
+GLOBAL_CAUSAL_MASK: torch.Tensor = create_causal_mask(MAX_SEQ_LEN, device="cpu")
+
 
 def train_epoch(
-    model: nn.Module, 
-    dataloader: DataLoader, # type: ignore
-    criterion: nn.Module, 
-    optimizer: Optimizer, 
-    scheduler: LRScheduler, 
-    device: DeviceType, 
-    scaler: GradScaler
-) -> float:
+    model,
+    dataloader,
+    criterion,
+    optimizer,
+    scheduler,
+    scaler,
+    device,
+):
     model.train()
-    total_loss: float = 0.0
-    
-    global_mask: torch.Tensor = GLOBAL_CAUSAL_MASK.to(device).bool()
-    
-    src: torch.Tensor
-    tgt: torch.Tensor
-    for _, (src, tgt) in enumerate(dataloader): # type: ignore
+    total_loss = 0.0
+
+    global_mask = GLOBAL_CAUSAL_MASK.bool()
+
+    for _, (src, tgt) in enumerate(dataloader):
+
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
-        
-        tgt_input: torch.Tensor = tgt[:-1, :]
-        tgt_expected: torch.Tensor = tgt[1:, :]
-        
-        src_padding_mask: torch.Tensor = (src == PAD_IDX).transpose(0, 1).bool()
-        tgt_padding_mask: torch.Tensor = (tgt_input == PAD_IDX).transpose(0, 1).bool()
-        
-        seq_len: int = tgt_input.size(0)
-        tgt_mask: torch.Tensor = global_mask[:seq_len, :seq_len]
-        
-        with torch.autocast(device_type='cuda' if 'cuda' in str(device) else 'cpu'):
-            output: torch.Tensor = model(
-                src, 
-                tgt_input, 
+
+        # ✅ batch-first fix
+        tgt_input = tgt[:, :-1]
+        tgt_expected = tgt[:, 1:]
+
+        src_padding_mask = (src == PAD_IDX).bool()
+        tgt_padding_mask = (tgt_input == PAD_IDX).bool()
+
+        seq_len = tgt_input.size(1)
+        tgt_mask = global_mask[:seq_len, :seq_len].to(device)
+
+        with torch.autocast("cuda"):
+            output = model(
+                src,
+                tgt_input,
                 tgt_mask=tgt_mask,
                 src_padding_mask=src_padding_mask,
-                tgt_padding_mask=tgt_padding_mask
+                tgt_padding_mask=tgt_padding_mask,
             )
-            
-            loss: torch.Tensor = criterion(
-                output.view(-1, output.size(-1)),
-                tgt_expected.view(-1)
+
+            loss = criterion(
+                output.reshape(-1, output.size(-1)),
+                tgt_expected.reshape(-1),
             )
-        
+
         optimizer.zero_grad(set_to_none=True)
-        
-        scaler.scale(loss).backward() #type: ignore
-        
+
+        scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        
+
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
         scaler.step(optimizer)
         scaler.update()
 
         scheduler.step()
-        
-        total_loss += loss.item()
-    
-    return total_loss / len(dataloader) #type: ignore
 
+        total_loss += loss.item()
+
+    return total_loss / len(dataloader)
 
 @torch.no_grad()
-def evaluate(
-    model: nn.Module, 
-    dataloader: DataLoader, # type: ignore
-    criterion: nn.Module, 
-    device: DeviceType
-) -> float:
+def evaluate(model, dataloader, criterion, device):
     model.eval()
-    total_loss: float = 0.0
-    
-    global_mask: torch.Tensor = GLOBAL_CAUSAL_MASK.to(device).bool()
+    total_loss = 0.0
 
-    src: torch.Tensor
-    tgt: torch.Tensor
-    for _, (src, tgt) in enumerate(dataloader): #type: ignore
+    global_mask = GLOBAL_CAUSAL_MASK.bool()
+
+    for _, (src, tgt) in enumerate(dataloader):
+
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
 
-        tgt_input: torch.Tensor = tgt[:-1, :]
-        tgt_expected: torch.Tensor = tgt[1:, :]
+        tgt_input = tgt[:, :-1]
+        tgt_expected = tgt[:, 1:]
 
-        seq_len: int = tgt_input.size(0)
-        tgt_mask: torch.Tensor = global_mask[:seq_len, :seq_len]
-        
-        with torch.autocast(device_type='cuda' if 'cuda' in str(device) else 'cpu'):
-            output: torch.Tensor = model(src, tgt_input, tgt_mask=tgt_mask)
-            loss: torch.Tensor = criterion(output.view(-1, output.size(-1)), tgt_expected.view(-1))
-            
+        seq_len = tgt_input.size(1)
+        tgt_mask = global_mask[:seq_len, :seq_len].to(device)
+
+        with torch.autocast("cuda"):
+            output = model(src, tgt_input, tgt_mask=tgt_mask)
+
+            loss = criterion(
+                output.reshape(-1, output.size(-1)),
+                tgt_expected.reshape(-1),
+            )
+
         total_loss += loss.item()
 
-    return total_loss / len(dataloader) #type: ignore
+    return total_loss / len(dataloader)

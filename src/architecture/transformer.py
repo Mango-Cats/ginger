@@ -34,19 +34,13 @@ class Transformer(nn.Module):
         num_decoder_layers: int = 4,
         feedforward_dim: int = 512,
         dropout_rate: float = 0.1,
-    ) -> None:
+    ):
         super().__init__()
 
         self.embedding_dim = embedding_dim
 
-        self.grapheme_embedding = nn.Embedding(
-            num_embeddings=num_graphemes,
-            embedding_dim=embedding_dim,
-        )
-        self.phoneme_embedding = nn.Embedding(
-            num_embeddings=num_phonemes,
-            embedding_dim=embedding_dim,
-        )
+        self.grapheme_embedding = nn.Embedding(num_graphemes, embedding_dim)
+        self.phoneme_embedding = nn.Embedding(num_phonemes, embedding_dim)
 
         self.positional_encoder = PositionalEncoding(
             embedding_dim=embedding_dim,
@@ -60,44 +54,29 @@ class Transformer(nn.Module):
             num_decoder_layers=num_decoder_layers,
             dim_feedforward=feedforward_dim,
             dropout=dropout_rate,
-            batch_first=False,
+            batch_first=True,
         )
 
         self.output_projection = nn.Linear(embedding_dim, num_phonemes)
 
     def forward(
-        self,
-        src: torch.Tensor,
-        tgt: torch.Tensor,
-        tgt_mask: torch.Tensor | None = None,
-        src_padding_mask: torch.Tensor | None = None,
-        tgt_padding_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        """
-        Forward pass through the G2P Transformer.
-        """
+        self, src, tgt, tgt_mask=None, src_padding_mask=None, tgt_padding_mask=None
+    ):
+        src = self.grapheme_embedding(src) * math.sqrt(self.embedding_dim)
+        src = self.positional_encoder(src)
 
-        grapheme_embeddings: torch.Tensor = self.grapheme_embedding(src)
+        tgt = self.phoneme_embedding(tgt) * math.sqrt(self.embedding_dim)
+        tgt = self.positional_encoder(tgt)
 
-        grapheme_embeddings = grapheme_embeddings * math.sqrt(self.embedding_dim)
-
-        encoded_src: torch.Tensor = self.positional_encoder(grapheme_embeddings)
-
-        phoneme_embeddings: torch.Tensor = self.phoneme_embedding(tgt)
-        phoneme_embeddings = phoneme_embeddings * math.sqrt(self.embedding_dim)
-        encoded_tgt: torch.Tensor = self.positional_encoder(phoneme_embeddings)
-
-        decoder_output: torch.Tensor = self.transformer(
-            src=encoded_src,
-            tgt=encoded_tgt,
+        out = self.transformer(
+            src=src,
+            tgt=tgt,
             tgt_mask=tgt_mask,
             src_key_padding_mask=src_padding_mask,
             tgt_key_padding_mask=tgt_padding_mask,
         )
 
-        output_logits: torch.Tensor = self.output_projection(decoder_output)
-
-        return output_logits
+        return self.output_projection(out)
 
 
 def create_causal_mask(length: int, device: torch.device) -> torch.Tensor:
@@ -107,8 +86,7 @@ def create_causal_mask(length: int, device: torch.device) -> torch.Tensor:
     This ensures the model can only look at previous tokens when generating
     the current token during training.
     """
-    mask: torch.Tensor = torch.triu(
-        torch.ones(length, length, device=device) * float("-inf"),
+    return torch.triu(
+        torch.full((length, length), float("-inf"), device=device),
         diagonal=1,
     )
-    return mask

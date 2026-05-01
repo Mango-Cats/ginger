@@ -41,7 +41,7 @@ class PositionalEncoding(nn.Module):
 
         # Reshape from (max_len, d_model) to (max_len, 1, d_model)
         # This is needed because batches are: (seq_len, batch_size, d_model)
-        pe = pe.unsqueeze(0).transpose(0, 1)
+        pe = pe.unsqueeze(0)
 
         self.register_buffer("pe", pe)
 
