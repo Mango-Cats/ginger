@@ -1,49 +1,45 @@
-from typing import List, Tuple
 import torch
-
 from src.architecture.transformer import create_causal_mask
-from src.dataman import Vocabulary
 from src.dataman.constants import END_IDX, START_IDX
 
 
 @torch.no_grad()
-def greedy_decode(
+def batched_greedy_decode(
     model,
-    src_tokens: List[str],
-    grapheme_vocab: Vocabulary,
-    phoneme_vocab: Vocabulary,
+    src_tensor: torch.Tensor,
     device: torch.device,
-    max_length: int = 50,
-) -> Tuple[str, List[int]]:
-
+    max_len: int = 50,
+):
     model.eval()
 
-    src_indices = grapheme_vocab.encode(src_tokens)
-    src_indices = [START_IDX] + src_indices + [END_IDX]
+    B = src_tensor.size(0)
 
-    src_tensor = torch.tensor(src_indices, dtype=torch.long, device=device).unsqueeze(0)
+    src_tensor = src_tensor.to(device)
 
-    tgt_indices = [START_IDX]
+    tgt_tokens = torch.full((B, 1), START_IDX, dtype=torch.long, device=device)
 
-    for _ in range(max_length):
-        tgt_tensor = torch.tensor(
-            tgt_indices, dtype=torch.long, device=device
-        ).unsqueeze(0)
+    finished = torch.zeros(B, dtype=torch.bool, device=device)
 
-        seq_len = tgt_tensor.size(1)
+    for _ in range(max_len):
+        seq_len = tgt_tokens.size(1)
         tgt_mask = create_causal_mask(seq_len, device)
 
-        output = model(src_tensor, tgt_tensor, tgt_mask=tgt_mask)
+        output = model(src_tensor, tgt_tokens, tgt_mask=tgt_mask)
+        next_logits = output[:, -1, :]  # (B, V)
 
-        next_token_logits = output[:, -1, :]  # (1, vocab)
+        next_tokens = torch.argmax(next_logits, dim=-1)  # (B,)
 
-        next_token_idx = torch.argmax(next_token_logits, dim=-1).item()
+        tgt_tokens = torch.cat([tgt_tokens, next_tokens.unsqueeze(1)], dim=1)
 
-        tgt_indices.append(next_token_idx)
+        finished |= next_tokens == END_IDX
 
-        if next_token_idx == END_IDX:
+        if finished.all():
             break
 
-    filtered = [i for i in tgt_indices if i not in (START_IDX, END_IDX)]
+    results = []
+    for i in range(B):
+        seq = tgt_tokens[i].tolist()
+        filtered = [t for t in seq if t not in (START_IDX, END_IDX)]
+        results.append(filtered)
 
-    return phoneme_vocab.decode(filtered), filtered
+    return results

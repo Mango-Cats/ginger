@@ -91,13 +91,13 @@ def evaluate(model, dataloader, criterion, device):
 
         with torch.autocast(str(device)):
             output = model(
-                src, 
-                tgt_input, 
+                src,
+                tgt_input,
                 tgt_mask=tgt_mask,
                 src_padding_mask=src_padding_mask,
-                tgt_padding_mask=tgt_padding_mask
+                tgt_padding_mask=tgt_padding_mask,
             )
-            
+
             loss = criterion(
                 output.reshape(-1, output.size(-1)),
                 tgt_expected.reshape(-1),
@@ -106,6 +106,7 @@ def evaluate(model, dataloader, criterion, device):
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
+
 
 def train_model(
     model,
@@ -135,7 +136,6 @@ def train_model(
     print(f"\nStarting training for {num_epochs} epochs...\n")
 
     for epoch in range(num_epochs):
-
         train_loss = train(
             model=model,
             dataloader=train_loader,
@@ -183,9 +183,7 @@ def train_model(
             print(f"Best validation loss: {best_val_loss:.4f} @ epoch {best_epoch}")
             print("Restoring best model...")
 
-            model.load_state_dict(
-                torch.load(best_model_path, map_location=device)
-            )
+            model.load_state_dict(torch.load(best_model_path, map_location=device))
             break
 
     return {

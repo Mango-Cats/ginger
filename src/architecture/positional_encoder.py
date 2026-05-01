@@ -46,5 +46,5 @@ class PositionalEncoding(nn.Module):
         seq_len = x.size(1)
         pe_sliced = self.pe[:, :seq_len, :].to(x.device)
         x = x + pe_sliced
-        
+
         return self.dropout(x)
