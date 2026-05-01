@@ -11,7 +11,7 @@ from src.dataman.constants import PAD_IDX
 
 DeviceType = Union[torch.device, str]
 
-# PRE-COMPUTE MASK
+# pre-computation
 MAX_SEQ_LEN: int = 500
 GLOBAL_CAUSAL_MASK: torch.Tensor = create_causal_mask(MAX_SEQ_LEN, device="cpu")
 
@@ -35,7 +35,6 @@ def train_epoch(
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
 
-        # ✅ batch-first fix
         tgt_input = tgt[:, :-1]
         tgt_expected = tgt[:, 1:]
 
@@ -104,3 +103,87 @@ def evaluate(model, dataloader, criterion, device):
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
+
+def train_model(
+    model,
+    train_loader,
+    val_loader,
+    criterion,
+    optimizer,
+    scheduler,
+    scaler,
+    device,
+    num_epochs,
+    patience,
+    best_model_path="best_g2p_model.pt",
+    log_every=5,
+):
+    no_improve = 0
+    best_val_loss = float("inf")
+
+    train_losses = []
+    val_losses = []
+
+    window_best_val = float("inf")
+    window_best_epoch = -1
+
+    print(f"\nStarting training for {num_epochs} epochs...\n")
+
+    for epoch in range(num_epochs):
+
+        train_loss = train_epoch(
+            model=model,
+            dataloader=train_loader,
+            criterion=criterion,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            scaler=scaler,
+            device=device,
+        )
+
+        val_loss = evaluate(model, val_loader, criterion, device)
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+
+        # GLOBAL BEST
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            no_improve = 0
+            torch.save(model.state_dict(), best_model_path)
+            status = "(Best)"
+        else:
+            no_improve += 1
+            status = f"(No improvement for {no_improve} epochs)"
+
+        if val_loss < window_best_val:
+            window_best_val = val_loss
+            window_best_epoch = epoch + 1
+
+        if (epoch + 1) % log_every == 0:
+            print(
+                f"Epoch {epoch+1:3d}/{num_epochs} | "
+                f"Train Loss: {train_loss:.4f} | "
+                f"Val Loss: {val_loss:.4f} {status} | "
+                f"Best (last {log_every}): {window_best_val:.4f} @ epoch {window_best_epoch}"
+            )
+
+            window_best_val = float("inf")
+            window_best_epoch = -1
+
+        if no_improve >= patience:
+            print(f"\nStopping early (patience={patience})")
+            print(f"Best validation loss: {best_val_loss:.4f}")
+            print("Restoring best model...")
+
+            model.load_state_dict(
+                torch.load(best_model_path, map_location=device)
+            )
+            break
+
+    return {
+        "model": model,
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "best_val_loss": best_val_loss,
+    }

@@ -27,20 +27,14 @@ class PositionalEncoding(nn.Module):
             0, max_sequence_length, dtype=torch.float
         ).unsqueeze(1)
 
-        # Compute the scaling factors for different dimensions
-        # Lower dimensions get lower frequencies (vary slowly)
-        # Higher dimensions get higher frequencies (vary quickly)
         div_term: torch.Tensor = torch.exp(
             torch.arange(0, embedding_dim, 2).float()
             * (-math.log(10000.0) / embedding_dim)
         )
 
-        # Sine to even indices and cosine to odd indices
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
 
-        # Reshape from (max_len, d_model) to (max_len, 1, d_model)
-        # This is needed because batches are: (seq_len, batch_size, d_model)
         pe = pe.unsqueeze(0)
 
         self.register_buffer("pe", pe)
