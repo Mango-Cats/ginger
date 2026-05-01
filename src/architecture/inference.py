@@ -26,8 +26,9 @@ def greedy_decode(
     tgt_indices = [START_IDX]
 
     for _ in range(max_length):
-
-        tgt_tensor = torch.tensor(tgt_indices, dtype=torch.long, device=device).unsqueeze(0)
+        tgt_tensor = torch.tensor(
+            tgt_indices, dtype=torch.long, device=device
+        ).unsqueeze(0)
 
         seq_len = tgt_tensor.size(1)
         tgt_mask = create_causal_mask(seq_len, device)

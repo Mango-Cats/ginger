@@ -22,9 +22,7 @@ def evaluate_model(
     - prints samples
     """
 
-    model.load_state_dict(
-        torch.load(model_path, map_location=device)
-    )
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
 
@@ -34,7 +32,6 @@ def evaluate_model(
     references = []
 
     for graphemes, true_phonemes in test_pairs:
-
         word = "".join(graphemes)
 
         pred, _ = greedy_decode(
@@ -56,7 +53,9 @@ def evaluate_model(
     print(f"Word Error Rate (WER):    {wer:.2f}%")
 
     print("\nSample Predictions:")
-    sample_indices = random.sample(range(len(test_pairs)), k=min(sample_size, len(test_pairs)))
+    sample_indices = random.sample(
+        range(len(test_pairs)), k=min(sample_size, len(test_pairs))
+    )
 
     for idx in sample_indices:
         graphemes = "".join(test_pairs[idx][0])

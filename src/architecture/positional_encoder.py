@@ -43,6 +43,9 @@ class PositionalEncoding(nn.Module):
         """
         Add positional encodings to embeddings.
         """
-        seq_len: int = embeddings.size(0)
-        embeddings = embeddings + self.pe[:seq_len, :]
-        return self.dropout(embeddings)
+        seq_len = x.size(1)
+
+        pe_sliced = self.pe[:, :seq_len, :].to(x.device)
+
+        x = x + pe_sliced
+        return self.dropout(x)

@@ -11,7 +11,6 @@ def compute_metrics(predictions, references) -> Tuple[float, float]:
     assert len(predictions) == len(references), "Mismatch in predictions/references"
 
     for pred, ref in zip(predictions, references):
-
         errors = levenshtein_distance(pred, ref)
 
         total_phoneme_errors += errors

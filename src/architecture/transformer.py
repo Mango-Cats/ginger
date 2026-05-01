@@ -1,14 +1,3 @@
-"""
-Grapheme-to-Phoneme Transformer
-
-A PyTorch implementation of a seq2seq Transformer for converting written text
-(graphemes) to phonetic pronunciation (phonemes).
-
-Example:
-    "tough" → "tuff"
-    "read" → "red" (present tense) or "red" (past tense)
-"""
-
 import math
 from .positional_encoder import PositionalEncoding
 import torch

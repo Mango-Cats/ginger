@@ -1,9 +1,4 @@
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler
-from torch.cuda.amp.grad_scaler import GradScaler
 from typing import Union
 
 from src.architecture.transformer import create_causal_mask
@@ -27,20 +22,21 @@ def train_epoch(
 ):
     model.train()
     total_loss = 0.0
-
     global_mask = GLOBAL_CAUSAL_MASK.bool()
 
     for _, (src, tgt) in enumerate(dataloader):
-
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
 
+        # Because batch_first=True, Sequence is dimension 1.
         tgt_input = tgt[:, :-1]
         tgt_expected = tgt[:, 1:]
 
+        # PyTorch padding masks expect (Batch, Seq) when batch_first=True
         src_padding_mask = (src == PAD_IDX).bool()
         tgt_padding_mask = (tgt_input == PAD_IDX).bool()
 
+        # Create causal mask (seq_len x seq_len)
         seq_len = tgt_input.size(1)
         tgt_mask = global_mask[:seq_len, :seq_len].to(device)
 
@@ -59,30 +55,25 @@ def train_epoch(
             )
 
         optimizer.zero_grad(set_to_none=True)
-
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
-
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-
         scaler.step(optimizer)
         scaler.update()
-
         scheduler.step()
 
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
 
+
 @torch.no_grad()
 def evaluate(model, dataloader, criterion, device):
     model.eval()
     total_loss = 0.0
-
     global_mask = GLOBAL_CAUSAL_MASK.bool()
 
     for _, (src, tgt) in enumerate(dataloader):
-
         src = src.to(device, non_blocking=True)
         tgt = tgt.to(device, non_blocking=True)
 
@@ -94,7 +85,6 @@ def evaluate(model, dataloader, criterion, device):
 
         with torch.autocast("cuda"):
             output = model(src, tgt_input, tgt_mask=tgt_mask)
-
             loss = criterion(
                 output.reshape(-1, output.size(-1)),
                 tgt_expected.reshape(-1),
@@ -103,6 +93,7 @@ def evaluate(model, dataloader, criterion, device):
         total_loss += loss.item()
 
     return total_loss / len(dataloader)
+
 
 def train_model(
     model,
@@ -130,8 +121,7 @@ def train_model(
     print(f"\nStarting training for {num_epochs} epochs...\n")
 
     for epoch in range(num_epochs):
-
-        train_loss = train_epoch(
+        train_loss = train(
             model=model,
             dataloader=train_loader,
             criterion=criterion,
@@ -162,7 +152,7 @@ def train_model(
 
         if (epoch + 1) % log_every == 0:
             print(
-                f"Epoch {epoch+1:3d}/{num_epochs} | "
+                f"Epoch {epoch + 1:3d}/{num_epochs} | "
                 f"Train Loss: {train_loss:.4f} | "
                 f"Val Loss: {val_loss:.4f} {status} | "
                 f"Best (last {log_every}): {window_best_val:.4f} @ epoch {window_best_epoch}"
@@ -176,9 +166,7 @@ def train_model(
             print(f"Best validation loss: {best_val_loss:.4f}")
             print("Restoring best model...")
 
-            model.load_state_dict(
-                torch.load(best_model_path, map_location=device)
-            )
+            model.load_state_dict(torch.load(best_model_path, map_location=device))
             break
 
     return {
