@@ -24,7 +24,7 @@ def evaluate_model(
 
     predictions = []
     references = []
-    sample_pairs = []  # Store some raw strings for the sample output
+    sample_pairs = []
 
     for src_tensor, tgt_tensor in test_loader:
         src_tensor = src_tensor.to(device)
